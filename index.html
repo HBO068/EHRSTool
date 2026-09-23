@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SPC-RS/EH Planning KPI Calculator</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<style>
+* { -webkit-user-select:none; -moz-user-select:none; -ms-user-select:none; user-select:none; }
+input,textarea,select { -webkit-user-select:text; -moz-user-select:text; user-select:text; }
+body{margin:0;padding-top:70px;font-family:Segoe UI,Arial,sans-serif;background:radial-gradient(circle at top left,#dff3f8 0,#eef5f8 36%,#f8fbfd 100%);color:#0f172a}
+.page{max-width:1450px;margin:35px auto;padding:20px}
+.header{position:relative;overflow:hidden;background:linear-gradient(135deg,#002f4b 0%,#006b8f 55%,#00a3ad 100%);color:white;padding:34px;border-radius:24px;margin-bottom:24px;box-shadow:0 16px 34px rgba(0,59,92,.22)}
+.header:before{content:"";position:absolute;right:-70px;top:-80px;width:310px;height:310px;border-radius:50%;background:rgba(255,255,255,.12)}
+.header:after{content:"RS • EH • YARD • CRANES • KPI";position:absolute;right:24px;bottom:18px;font-size:12px;letter-spacing:3px;color:rgba(255,255,255,.45);font-weight:800}
+.header h1{margin:0;font-size:34px;letter-spacing:.2px}
+.header p{margin:8px 0 0;color:#dff7ff}
+.header-tags{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.header-tag{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:7px 12px;font-size:12px;font-weight:800;color:#fff}
+.card{background:white;padding:24px;border-radius:20px;margin-bottom:24px;box-shadow:0 8px 24px rgba(0,0,0,.08)}
+.controls{display:grid;grid-template-columns:minmax(280px,1fr) 160px 160px 160px;gap:16px;align-items:end}
+.controls>div{min-width:0}
+label{font-weight:700;font-size:14px;display:block;margin-bottom:8px}
+input,select,button{width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #d1d5db;font-size:14px}
+button{background:#ff6b00;color:white;border:none;font-weight:800;cursor:pointer}
+button:hover{background:#e85f00}
+.export-btn{background:#00a3ad}
+.export-btn:hover{background:#007f88}
+.status{margin-top:12px;font-weight:700;color:#475569}
+.ops-grid{display:flex;flex-direction:column;gap:26px;margin-bottom:24px}
+.ops-row{display:grid;gap:14px}
+.ops-row.moves-row{grid-template-columns:repeat(4,minmax(170px,1fr))}
+.ops-row.operation-row{grid-template-columns:repeat(3,minmax(0,1fr));width:calc(75% - 7px);margin:0 auto}
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:stretch}
+.metric,.ops-metric{background:#f8fafc;border:1px solid #e5e7eb;border-radius:16px;padding:18px}
+.metric{display:flex;flex-direction:column}
+.ops-metric{background:linear-gradient(135deg,#f8fafc,#eef7fb);border-left:5px solid #ff6b00}
+.metric-title,.ops-title{color:#64748b;font-weight:700;font-size:13px}
+.metric-title{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.metric-target{font-size:11px;font-weight:800;white-space:nowrap;color:#475569}
+.metric-value,.ops-value{font-size:30px;font-weight:900;color:#003b5c;margin-top:8px}
+.target-good{color:#15803d!important}.target-bad{color:#b91c1c!important}
+.metric.disabled{opacity:.55}.metric.disabled .details-btn{background:#cbd5e1;cursor:not-allowed}
+.small-note{color:#64748b;font-size:13px;margin-top:6px}
+.metric .small-note{margin-bottom:14px}
+.metric .details-btn{margin-top:auto}
+.details-btn{margin-top:14px;background:#003b5c;color:white;border:none;cursor:pointer;padding:9px 16px;border-radius:10px;font-weight:700;font-size:13px}
+.details-btn:hover{background:#002b43}
+.hidden{display:none}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}
+th{background:#003b5c;color:white;padding:10px;text-align:left;white-space:nowrap}
+td{padding:9px;border-bottom:1px solid #e5e7eb;vertical-align:top}
+tr:hover{background:#f8fafc}
+.good{color:#15803d;font-weight:900}
+.bad{color:#b91c1c;font-weight:900}
+.twins-separator{background:#e2e8f0;color:#0f172a;font-weight:900;letter-spacing:.4px}
+#twinPlanningDetailTable .twins-separator{background:#003b5c!important;color:white!important;font-size:15px;font-weight:800;text-align:center;letter-spacing:0}
+.table-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.detail-card-header{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:4px}
+.detail-card-header h2{margin:0}
+.detail-card-header .button-group{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.export-detail-btn{background:#00a3ad;color:white;border:none;border-radius:10px;padding:9px 18px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;width:auto}
+.export-detail-btn:hover{background:#007f88}
+.filter-box{max-width:280px;margin:10px 0 0 0;padding:10px;box-sizing:border-box;border-radius:12px;border:1px solid #d1d5db}
+.copyright-footer{width:100%;text-align:center;padding:18px 10px;margin-top:30px;font-size:12px;font-weight:700;letter-spacing:1px;color:#64748b;border-top:1px solid #dbe4ea}
+.export-clean .details-btn,.export-clean .export-btn{display:none!important}
+.export-clean{background:#fff!important}
+@media(max-width:1200px){.controls{grid-template-columns:1fr 1fr}.kpi-grid{grid-template-columns:repeat(2,1fr)}.ops-row.moves-row,.ops-row.operation-row{grid-template-columns:repeat(2,1fr);width:100%}}
+@media(max-width:700px){.controls,.kpi-grid,.ops-row.moves-row,.ops-row.operation-row{grid-template-columns:1fr;width:100%}}
+.tos-bg {position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;background:radial-gradient(120% 90% at 50% 0%, #123049 0%, #0b1d2e 45%, #06121d 100%);--tos-amber:#ffb020;--tos-teal:#2ec5b6;--tos-line:rgba(120, 190, 230, 0.14)}
+.tos-bg__water {position:absolute;left:0;right:0;bottom:0;height:34%;background:linear-gradient(180deg, #0a2135 0%, #071824 100%);box-shadow:inset 0 1px 0 rgba(150, 210, 240, 0.18)}
+.tos-bg__water::after {content:"";position:absolute;inset:0;background-image:repeating-linear-gradient(180deg, rgba(160, 220, 250, 0.07) 0px, rgba(160, 220, 250, 0.07) 1px, transparent 1px, transparent 9px);animation:tos-swell 9s ease-in-out infinite alternate}
+@keyframes tos-swell {from {transform:translateY(0);opacity:0.7}to {transform:translateY(4px);opacity:1}}
+.tos-bg__grid {position:absolute;left:-25%;right:-25%;bottom:26%;height:46%;background-image:linear-gradient(to right, var(--tos-line) 1px, transparent 1px), linear-gradient(to bottom, var(--tos-line) 1px, transparent 1px);background-size:92px 46px;transform:perspective(520px) rotateX(66deg);transform-origin:bottom center;mask-image:linear-gradient(to top, #000 10%, transparent 85%)}
+.tos-bg__cranes {position:absolute;left:0;right:0;bottom:30%;height:42%;display:flex;justify-content:space-around;align-items:flex-end;opacity:0.55}
+.tos-crane {position:relative;width:200px;height:100%;color:#8fb9d6}
+.tos-crane__boom,.tos-crane__leg,.tos-crane__beam,.tos-crane__hoist {position:absolute;background:currentColor}
+.tos-crane__boom {top:8%;left:-12%;width:124%;height:6px;border-radius:3px}
+.tos-crane__beam {top:22%;left:8%;width:84%;height:4px;opacity:0.7}
+.tos-crane__leg {top:8%;width:5px;height:92%;opacity:0.85}
+.tos-crane__leg--a {left:18%}
+.tos-crane__leg--b {left:74%}
+.tos-crane__hoist {top:8%;width:3px;height:34%;left:40%;opacity:0.9;animation:tos-hoist 7s ease-in-out infinite}
+.tos-crane__hoist::after {content:"";position:absolute;bottom:-14px;left:-13px;width:30px;height:14px;background:var(--tos-amber);border-radius:2px;box-shadow:0 0 18px rgba(255, 176, 32, 0.45)}
+@keyframes tos-hoist {0%, 100% {height:26%;left:34%}45% {height:62%;left:34%}55% {height:62%;left:66%}90% {height:26%;left:66%}}
+.tos-crane--mid {transform:scale(0.82) translateY(4%);opacity:0.8}
+.tos-crane--far {transform:scale(0.64) translateY(8%);opacity:0.55}
+.tos-crane--mid .tos-crane__hoist {animation-duration:9s;animation-delay:-3s}
+.tos-crane--far .tos-crane__hoist {animation-duration:11s;animation-delay:-6s}
+.tos-bg__vessel {position:absolute;bottom:27%;left:-30%;width:460px;height:74px;animation:tos-sail 60s linear infinite;opacity:0.9}
+.tos-vessel__hull {position:absolute;bottom:0;left:0;right:0;height:30px;background:#14324a;border-top:2px solid rgba(150, 210, 240, 0.35);border-radius:4px 26px 8px 4px}
+.tos-vessel__stack {position:absolute;bottom:30px;left:6%;right:22%;height:44px;display:flex;align-items:flex-end;gap:4px}
+.tos-vessel__stack span {flex:1;border-radius:1px;background:var(--tos-teal);opacity:0.75}
+.tos-vessel__stack span:nth-child(3n) {background:var(--tos-amber);height:78%}
+.tos-vessel__stack span:nth-child(3n+1) {height:100%}
+.tos-vessel__stack span:nth-child(3n+2) {height:58%;background:#4f9ecf}
+.tos-vessel__bridge {position:absolute;bottom:30px;right:8%;width:46px;height:34px;background:#1d4260;border-radius:3px 3px 0 0}
+@keyframes tos-sail {from {transform:translateX(0)}to {transform:translateX(calc(100vw + 40%))}}
+.tos-bg__lights {position:absolute;left:0;right:0;bottom:30%;height:2px;background:repeating-linear-gradient(to right, rgba(255, 176, 32, 0.75) 0 3px, transparent 3px 84px);filter:drop-shadow(0 0 6px rgba(255, 176, 32, 0.6))}
+.tos-bg__haze {position:absolute;inset:0;background:radial-gradient(60% 40% at 20% 85%, rgba(46, 197, 182, 0.12), transparent 70%), radial-gradient(50% 40% at 80% 80%, rgba(255, 176, 32, 0.1), transparent 70%)}
+@media (prefers-reduced-motion:reduce) {.tos-bg *, .tos-bg *::after {animation:none!important}}
+.tos-brand{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:18px;padding:8px 22px;background:rgba(6,18,29,.72);border-bottom:1px solid rgba(150,210,240,.18);backdrop-filter:blur(8px);font:600 15px/1 system-ui,"Segoe UI",sans-serif;color:#e6f2fa;min-height:70px}
+.tos-logo{display:flex;align-items:center;gap:12px;white-space:nowrap}
+.tos-logo svg{display:block}
+.tos-logo__name{letter-spacing:.02em;font-size:16px;font-weight:800;color:#fff}
+.tos-logo__name small{display:block;font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#a8c5d1;margin-top:2px}
+.tos-brand__rule{width:1px;align-self:stretch;background:rgba(150,210,240,.25)}
+.tos-brand__spacer{flex:1}
+</style>
+</head>
+
+<body>
+
+<div class="tos-bg" aria-hidden="true">
+  <div class="tos-bg__grid"></div>
+  <div class="tos-bg__cranes">
+    <div class="tos-crane tos-crane--far">
+      <div class="tos-crane__boom"></div><div class="tos-crane__beam"></div>
+      <div class="tos-crane__leg tos-crane__leg--a"></div><div class="tos-crane__leg tos-crane__leg--b"></div>
+      <div class="tos-crane__hoist"></div>
+    </div>
+    <div class="tos-crane">
+      <div class="tos-crane__boom"></div><div class="tos-crane__beam"></div>
+      <div class="tos-crane__leg tos-crane__leg--a"></div><div class="tos-crane__leg tos-crane__leg--b"></div>
+      <div class="tos-crane__hoist"></div>
+    </div>
+    <div class="tos-crane tos-crane--mid">
+      <div class="tos-crane__boom"></div><div class="tos-crane__beam"></div>
+      <div class="tos-crane__leg tos-crane__leg--a"></div><div class="tos-crane__leg tos-crane__leg--b"></div>
+      <div class="tos-crane__hoist"></div>
+    </div>
+  </div>
+  <div class="tos-bg__lights"></div>
+  <div class="tos-bg__vessel">
+    <div class="tos-vessel__stack">
+      <span></span><span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span><span></span>
+    </div>
+    <div class="tos-vessel__bridge"></div>
+    <div class="tos-vessel__hull"></div>
+  </div>
+  <div class="tos-bg__water"></div>
+  <div class="tos-bg__haze"></div>
+</div>
+
+<header class="tos-brand">
+  <span class="tos-logo">
+    <svg width="45" height="32" viewBox="0 0 180 128" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="30,25 150,8 160,20 40,37" fill="#FF6B35"/>
+      <polygon points="55,50 125,35 135,47 65,62" fill="#FF6B35"/>
+      <polygon points="20,75 80,65 90,77 30,87" fill="#FF6B35"/>
+    </svg>
+    <span class="tos-logo__name">APM Terminals<small>Lifting Global Trade</small></span>
+  </span>
+  <span class="tos-brand__rule"></span>
+  <span class="tos-logo">
+    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 512 512">
+      <rect x="48" y="48" width="416" height="416" rx="72" fill="#42B0D5"/>
+      <polygon points="256.00,84.00 284.64,196.54 390.48,148.76 320.35,241.31 423.69,294.27 307.60,297.15 330.63,410.97 256.00,322.00 181.37,410.97 204.40,297.15 88.31,294.27 191.65,241.31 121.52,148.76 227.36,196.54" fill="#FFFFFF"/>
+    </svg>
+    <span class="tos-logo__name">MAERSK<small>Integrated Logistics</small></span>
+  </span>
+  <span class="tos-brand__spacer"></span>
+</header>
+
+<div class="page">
+
+<div class="header">
+  <h1>SPC-RS/EH Planning KPI Calculator</h1>
+  <p>Terminal operators, Yard Flow and planning KPI Analytics For RS/EH Terminals</p>
+  <div class="header-tags">
+    <span class="header-tag">OPS PLANNING</span>
+    <span class="header-tag">YARD FLOW</span>
+    <span class="header-tag">KPI ANALYTICS</span>
+  </div>
+</div>
+
+<div class="card controls-card">
+  <div class="controls">
+    <div><label>Upload Vessel Work Instruction</label><input type="file" id="fileInput" accept=".txt,.csv,.xlsx"></div>
+    <div><label>Terminal</label><select id="terminal" onchange="handleTerminalChange()"><option value="">Select Terminal</option><option value="JOAQJ">JOAQJ</option><option value="LRMLW">LRMLW</option></select></div>
+    <div><button onclick="processFile()">Calculate KPIs</button></div>
+    <div><button class="export-btn" onclick="exportKPIReport()">Export PDF</button></div>
+  </div>
+  <div id="status" class="status">Waiting for File Upload</div>
+</div>
+
+<div id="summaryCard" class="card hidden">
+  <h2>Operational Summary</h2>
+  <div class="ops-grid">
+    <div class="ops-row moves-row">
+      <div class="ops-metric"><div class="ops-title">Total Moves</div><div class="ops-value" id="totalMoves">0</div></div>
+      <div class="ops-metric"><div class="ops-title">Total Load</div><div class="ops-value" id="totalLoad">0</div></div>
+      <div class="ops-metric"><div class="ops-title">Total Discharge</div><div class="ops-value" id="totalDischarge">0</div></div>
+      <div class="ops-metric"><div class="ops-title">Total Restows</div><div class="ops-value" id="totalRestows">0</div></div>
+    </div>
+    <div class="ops-row operation-row">
+      <div class="ops-metric"><div class="ops-title">CMPH</div><div class="ops-value" id="cmph">0.00</div></div>
+      <div class="ops-metric"><div class="ops-title">Planned Port Hours</div><div class="ops-value" id="plannedHours">0.0</div></div>
+      <div class="ops-metric"><div class="ops-title">CI Planned</div><div class="ops-value" id="ciPlanned">0.00</div></div>
+    </div>
+  </div>
+
+  <div id="yardKpiSection">
+  <h2>KPI Summary</h2>
+  <div class="kpi-grid">
+    <div class="metric">
+      <div class="metric-title"><span>Loading Points</span><span class="metric-target">Target: ≤2.00</span></div>
+      <div class="metric-value" id="loadingPoints">0.00</div>
+      <div class="small-note" id="loadingPointsObs">Active Points: 0.00</div>
+      <button class="details-btn" onclick="toggleDetails('loadingPointsDetails')">Show / Hide Details</button>
+    </div>
+    <div class="metric">
+      <div class="metric-title"><span>Rehandles</span><span class="metric-target">Target: ≤1.00%</span></div>
+      <div class="metric-value" id="rehandles">0.00%</div>
+      <div class="small-note" id="rehandlesObs">Eligible: 0 | Rehandles: 0</div>
+      <button class="details-btn" onclick="toggleDetails('rehandlesDetails')">Show / Hide Details</button>
+    </div>
+    <div class="metric">
+      <div class="metric-title"><span>Twin Planning</span><span class="metric-target">Target: ≥90.00%</span></div>
+      <div class="metric-value" id="twinPlanning">0.00%</div>
+      <div class="small-note" id="twinPlanningObs">Opportunities: 0 Pairs | Planned: 0 Pairs</div>
+      <button class="details-btn" onclick="toggleDetails('twinPlanningDetails')">Show / Hide Details</button>
+    </div>
+    <div class="metric">
+      <div class="metric-title"><span>Yard Picking Adherence</span><span class="metric-target">Target: ≥90.00%</span></div>
+      <div class="metric-value" id="yardPickingAdherence">0.00%</div>
+      <div class="small-note" id="yardPickingAdherenceObs">Eligible: 0 | Correct: 0 | Violations: 0</div>
+      <button class="details-btn" onclick="toggleDetails('yardPickingAdherenceDetails')">Show / Hide Details</button>
+    </div>
+    <div class="metric">
+      <div class="metric-title"><span>POW Operational Overlap</span><span class="metric-target">Target: ≤10.00%</span></div>
+      <div class="metric-value" id="operationalOverlap">0.00%</div>
+      <div class="small-note" id="operationalOverlapObs">Total Bays: 0 | Overlapped: 0</div>
+      <button class="details-btn" onclick="toggleDetails('operationalOverlapDetails')">Show / Hide Details</button>
+    </div>
+    <div class="metric disabled">
+      <div class="metric-title"><span>Dual Cycling</span></div>
+      <div class="metric-value">N/A</div>
+      <div class="small-note">Under development</div>
+      <button class="details-btn" disabled>Show / Hide Details</button>
+    </div>
+  </div>
+  </div>
+</div>
+
+<div id="loadingPointsDetails" class="card hidden">
+  <div class="detail-card-header"><h2>Loading Points Details</h2><div class="button-group"><button class="export-detail-btn" onclick="exportDetailPDF('loadingPointsDetails','Loading Points')">Export Details PDF</button><button class="export-detail-btn" onclick="exportDetailExcel('loadingPointsTable','Loading Points')">Export to Excel</button></div></div>
+  <div class="table-wrap"><table id="loadingPointsTable"><thead><tr><th>Hour</th><th>System Hour</th><th>QC</th><th>Distinct Loading Points</th><th>Loading Points</th></tr></thead><tbody id="loadingPointsTableBody"></tbody></table></div>
+  <div id="loadingQueueSection" style="margin-top:28px">
+    <div class="detail-card-header"><h2>Loading Points per Queue</h2><div class="button-group"><button class="export-detail-btn" onclick="exportDetailPDF('loadingQueueSection','Loading Points per Queue')">Export Details PDF</button><button class="export-detail-btn" onclick="exportDetailExcel('loadingQueueTable','Loading Points per Queue')">Export to Excel</button></div></div>
+    <div class="table-wrap"><table id="loadingQueueTable"><thead><tr><th>System Hour Interval</th><th>Queue</th><th>Distinct Loading Points</th><th>Loading Points</th></tr></thead><tbody id="loadingQueueTableBody"></tbody></table></div>
+  </div>
+</div>
+
+<div id="rehandlesDetails" class="card hidden">
+  <div class="detail-card-header"><h2>Rehandles Details</h2><div class="button-group"><button class="export-detail-btn" onclick="exportDetailPDF('rehandlesDetails','Rehandles')">Export Details PDF</button><button class="export-detail-btn" onclick="exportDetailExcel('rehandlesDetailTable','Rehandles')">Export to Excel</button></div></div>
+  <div class="table-actions" style="margin:12px 0 4px;justify-content:flex-start"><select id="rehandlesVerifiedFilter" onchange="filterRehandlesDetails()" style="width:auto;min-width:220px"><option value="">All Verified Positions</option><option value="Actual">Actual</option><option value="Planned">Planned</option></select><span id="rehandlesFilterCount" class="small-note" style="margin:0;font-weight:700"></span></div>
+  <div class="table-wrap"><table id="rehandlesDetailTable"><thead><tr><th>Yard Block/Bay/Row</th><th>Rehandled Container</th><th>Verified Position</th><th>Rehandle Reason</th><th>Tier</th></tr></thead><tbody id="rehandlesTable"></tbody></table></div>
+</div>
+
+<div id="twinPlanningDetails" class="card hidden">
+  <div class="detail-card-header"><h2>Twin Planning Details</h2><div class="button-group"><button class="export-detail-btn" onclick="exportDetailPDF('twinPlanningDetails','Twin Planning')">Export Details PDF</button><button class="export-detail-btn" onclick="exportMissedTwinsExcel()">Export Missed Twins to Excel</button><button class="export-detail-btn" onclick="exportDetailExcel('twinPlanningDetailTable','Twin Planning')">Export All Twins to Excel</button></div></div>
+  <div class="table-wrap"><table id="twinPlanningDetailTable"><thead><tr><th>Status</th><th>Container 1</th><th>Yard Bay 1</th><th>Move To 1</th><th>Queue 1</th><th>Seq 1</th><th>Container 2</th><th>Yard Bay 2</th><th>Move To 2</th><th>Queue 2</th><th>Seq 2</th></tr></thead><tbody id="twinPlanningTable"></tbody></table></div>
+</div>
+
+<div id="yardPickingAdherenceDetails" class="card hidden">
+  <div class="detail-card-header"><h2>Yard Picking Sequence Details</h2><div class="button-group"><button class="export-detail-btn" onclick="exportDetailPDF('yardPickingAdherenceDetails','Yard Picking Adherence')">Export PDF</button><button class="export-detail-btn" onclick="exportDetailExcel('yardPickingAdherenceTable','Yard Picking Adherence')">Export Excel</button></div></div>
+  <input type="text" class="filter-box" placeholder="Search yard lane or container..." id="yardPickingAdherenceFilter" onkeyup="filterTable('yardPickingAdherenceTable','yardPickingAdherenceFilter')">
+  <div class="table-wrap"><table id="yardPickingAdherenceTable"><thead><tr><th>Yard Lane</th><th>Row</th><th>Yard Stack</th><th>Tier</th><th>Container</th><th>Sequence</th><th>Status</th><th>Reason</th></tr></thead><tbody id="yardPickingAdherenceTableBody"></tbody></table></div>
+</div>
+
+<div id="operationalOverlapDetails" class="card hidden">
+  <div class="detail-card-header"><h2>POW Operational Overlap Details</h2><div class="button-group"><button class="export-detail-btn" onclick="exportDetailPDF('operationalOverlapDetails','POW Operational Overlap')">Export PDF</button><button class="export-detail-btn" onclick="exportDetailExcel('operationalOverlapTable','POW Operational Overlap')">Export Excel</button></div></div>
+  <input type="text" class="filter-box" placeholder="Search yard bay or POWs..." id="operationalOverlapFilter" onkeyup="filterTable('operationalOverlapTable','operationalOverlapFilter')">
+  <div class="table-wrap"><table><thead><tr><th>Yard Bay</th><th>POW Count</th><th>POWs</th><th>Status</th></tr></thead><tbody id="operationalOverlapTable"></tbody></table></div>
+</div>
+
+<div class="copyright-footer">SPC Tangier - HBO Confidential & Proprietary © 2026</div>
+
+</div>
+
+<script>
+// HELPERS
+function $( id ){return document.getElementById(id);}
+function normalize(v){return String(v??'').trim();}
+function clean(v){return normalize(v).replace(/\s+/g,'');}
+function upper(v){return normalize(v).toUpperCase();}
+function number(v){const n=Number(v);return isNaN(n)?0:n;}
+function escapeHtml(v){return normalize(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+function toggleDetails(id){
+  const detailIds=['loadingPointsDetails','rehandlesDetails','twinPlanningDetails','yardPickingAdherenceDetails','operationalOverlapDetails'];
+  const target=$(id);if(!target)return;
+  const willShow=target.classList.contains('hidden');
+  detailIds.forEach(detailId=>{const el=$(detailId);if(el)el.classList.add('hidden');});
+  if(willShow)target.classList.remove('hidden');
+}
+function closeAllDetails(){['loadingPointsDetails','rehandlesDetails','twinPlanningDetails','yardPickingAdherenceDetails','operationalOverlapDetails'].forEach(id=>{const el=$(id);if(el)el.classList.add('hidden');});}
+function handleTerminalChange(){closeAllDetails();const summary=$('summaryCard');if(summary)summary.classList.add('hidden');}
+const JOAQJ_2026_TARGETS={loadingPoints:{value:2,direction:'max'},rehandles:{value:1,direction:'max'},twinPlanning:{value:90,direction:'min'},yardPickingAdherence:{value:90,direction:'min'},operationalOverlap:{value:10,direction:'max'}};
+function applyJOAQJTargetColor(id,value){const el=$(id),target=JOAQJ_2026_TARGETS[id];if(!el||!target)return;const achieved=target.direction==='max'?value<=target.value:value>=target.value;el.classList.remove('target-good','target-bad');el.classList.add(achieved?'target-good':'target-bad');}
+function filterTable(tableId,filterId){const filter=$(filterId).value.toLowerCase();const rows=$(tableId).getElementsByTagName('tr');for(let i=0;i<rows.length;i++){rows[i].style.display=rows[i].textContent.toLowerCase().includes(filter)?'':'none';}}
+function normalizeHeader(v){return normalize(v).toLowerCase().replace(/[^a-z0-9]/g,'');}
+function getValue(row,names){
+  for(const n of names){if(row[n]!==undefined)return row[n];}
+  const keys=Object.keys(row||{});
+  for(const n of names){const target=normalizeHeader(n);const found=keys.find(k=>normalizeHeader(k)===target);if(found!==undefined)return row[found];}
+  return '';
+}
+function fillTable(tableId,data,cols){const tbody=$(tableId);if(!tbody)return;tbody.innerHTML='';for(const row of data){const tr=document.createElement('tr');for(const col of cols){const td=document.createElement('td');let val=row[col]||'';if(typeof val==='number')val=val.toFixed(2);td.textContent=escapeHtml(String(val));tr.appendChild(td);}tbody.appendChild(tr);}}
+document.getElementById('fileInput').addEventListener('change',function(){
+  if(!this.files[0])return;
+  document.getElementById('terminal').value='';
+  handleTerminalChange();
+  document.getElementById('status').textContent='Select Terminal';
+});
+
+// Raw Move Time conversion copied from the RTG tool.
+const EXCEL_EPOCH_UTC=Date.UTC(1899,11,30);
+const DAY_MS=24*60*60*1000;
+const PLANNED_PORT_ALLOWANCE_MINUTES=90;
+function getMoveTimeSerial(row){
+  const raw=getValue(row,['Move Time']);
+  if(raw===null||raw===undefined||raw==='')return null;
+  const value=Number(raw);return Number.isFinite(value)&&value>0?value:null;
+}
+function excelSerialToDate(serial){
+  const n=Number(serial);if(!Number.isFinite(n)||n<=0)return null;
+  const utcDate=new Date(EXCEL_EPOCH_UTC+Math.round(n*DAY_MS));
+  return new Date(utcDate.getUTCFullYear(),utcDate.getUTCMonth(),utcDate.getUTCDate(),utcDate.getUTCHours(),utcDate.getUTCMinutes(),utcDate.getUTCSeconds(),utcDate.getUTCMilliseconds());
+}
+function getMoveDate(row){return excelSerialToDate(getMoveTimeSerial(row));}
+function moveHourKey(date){
+  if(!date)return'';
+  return date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0')+'T'+String(date.getHours()).padStart(2,'0');
+}
+function getOperationStartDate(rows){
+  const moveTimes=(rows||[]).filter(r=>upper(getValue(r,['Move Kind']))==='LOAD').map(getMoveTimeSerial).filter(v=>v!==null);
+  return moveTimes.length?excelSerialToDate(Math.min(...moveTimes)):null;
+}
+function ordinalSuffix(dayNum){
+  const mod100=dayNum%100;if(mod100>=11&&mod100<=13)return'th';
+  return dayNum%10===1?'st':dayNum%10===2?'nd':dayNum%10===3?'rd':'th';
+}
+function getCalendarOperationDayNumber(date,rows){
+  const start=getOperationStartDate(rows);if(!date||!start)return null;
+  const startDay=Date.UTC(start.getFullYear(),start.getMonth(),start.getDate());
+  const targetDay=Date.UTC(date.getFullYear(),date.getMonth(),date.getDate());
+  return Math.max(1,Math.floor((targetDay-startDay)/DAY_MS)+1);
+}
+function getDisplaySystemHourLabel(hourKey,rows){
+  const match=normalize(hourKey).match(/^(\d{4})-(\d{2})-(\d{2})(?:T|-)(\d{2})$/);if(!match)return'';
+  const year=Number(match[1]),month=Number(match[2])-1,day=Number(match[3]),hour=Number(match[4]);
+  const sourceHourDate=new Date(year,month,day,hour,0,0,0);
+  const recapDate=new Date(year,month,day,hour+1,0,0,0);
+  const dayNum=getCalendarOperationDayNumber(sourceHourDate,rows);if(dayNum===null)return'';
+  return `+${dayNum}${ordinalSuffix(dayNum)} day ${String(recapDate.getHours()).padStart(2,'0')}:00`;
+}
+
+// FILE PROCESSING
+async function processFile(){
+  const file=$('fileInput').files[0];
+  if(!file){alert('Please select a file.');return;}
+  if(!$('terminal').value){alert('Please select a terminal.');return;}
+  $('status').textContent='Processing...';
+  try{
+    let rows=[];
+    const fileName=file.name.toLowerCase();
+    if(fileName.endsWith('.xlsx')||fileName.endsWith('.xls')){
+      const ab=await file.arrayBuffer();
+      const wb=XLSX.read(ab);
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      rows=XLSX.utils.sheet_to_json(ws);
+    }else{
+      const text=await file.text();
+      const lines=text.replace(/\r/g,'').split('\n').filter(line=>line.trim()!=='');
+      if(lines.length===0)throw new Error('No data found in the uploaded file.');
+      const delimiter=lines[0].includes('\t')?'\t':(lines[0].includes(';')?';':',');
+      const header=lines[0].split(delimiter).map(h=>h.trim());
+      for(let i=1;i<lines.length;i++){
+        if(!lines[i].trim())continue;
+        const cells=lines[i].split(delimiter);
+        const row={};
+        for(let j=0;j<header.length;j++)row[header[j]]=cells[j]??'';
+        rows.push(row);
+      }
+    }
+    if(rows.length===0){alert('No data found.');return;}
+    const ops=calculateOperationalSummary(rows);
+    const terminal=$('terminal').value;
+    if(terminal==='LRMLW'){
+      window.latestRehandles=null;
+      window.latestKPIExport={rows,ops,terminal,data:{}};
+      renderResults({rows,ops,terminal});
+    }else{
+      for(const row of rows)deriveYardFields(row);
+      const loading=calculateLoadingPoints(rows);
+      const rehandles=calculateRehandles(rows);
+      window.latestRehandles=rehandles;
+      const twin=calculateTwinPlanning(rows);
+      const yardPicking=calculateYardPickingSequence(rows);
+      const operationalOverlap=calculateOperationalOverlap(rows);
+      window.latestKPIExport={rows,ops,terminal,data:{loading,rehandles,twin,yardPicking,operationalOverlap}};
+      renderResults({loading,rehandles,twin,yardPicking,operationalOverlap,rows,ops,terminal});
+    }
+    $('status').textContent='✅ Calculated '+rows.length+' rows';
+  }catch(err){
+    alert('Error: '+err.message);
+    $('status').textContent='❌ Error';
+  }
+}
+
+// PARSING
+function deriveYardFields(row){
+  const moveFrom=upper(getValue(row,['Move From','Current Position']));
+  const moveKind=normalize(getValue(row,['Move Kind','Type']));
+  const invalid=(area='EC')=>{row._yard={moveFrom,moveKind,isValidYard:false,yardBlock:area,yardBay:area,yardRow:area,yardBlockRow:area,yardTier:''};};
+  if(!moveFrom||moveFrom==='EC'){invalid('EC');return;}
+  if(moveFrom==='TIP'||moveFrom==='RAMP'){invalid('HP');return;}
+  let match=null;
+  if(/^7M\d{5}$/.test(moveFrom)){
+    match=[moveFrom,moveFrom.slice(0,2),moveFrom.slice(2,4),moveFrom.slice(4,6),moveFrom.slice(6)];
+  }else{
+    match=moveFrom.match(/^([A-Z0-9]{2})(\d{2})([A-Z])(\d{2})$/)
+      ||moveFrom.match(/^([A-Z0-9]{2})(\d{2})(\d{2})([A-Z])$/)
+      ||moveFrom.match(/^([A-Z0-9]{2})(\d{2})(\d{2})(\d{2})$/)
+      ||moveFrom.match(/^([A-Z0-9]{2})(\d{2})([A-Z])([A-Z])$/);
+  }
+  if(!match){invalid('EC');return;}
+  const yardBlock=match[1],yardBay=yardBlock+match[2],yardRow=match[3],yardTier=match[4];
+  row._yard={moveFrom,moveKind,isValidYard:true,yardBlock,yardBay,yardRow,yardBlockRow:yardBay+yardRow,yardTier};
+}
+
+// KPI CALCULATIONS
+function dateLabel(date){return date?date.toLocaleString():'';}
+function getContainer(row){return normalize(getValue(row,['Conatiner Number','Container No.','Container Number','Container']));}
+function getRehandleTierInfo(tier){
+  const value=normalize(tier).toUpperCase();
+  if(/^[A-G]$/.test(value))return{family:'LETTER',level:value.charCodeAt(0)-64};
+  if(/^\d+$/.test(value)&&Number(value)>0)return{family:'NUMBER',level:Number(value)};
+  return null;
+}
+function tierRank(tier){const info=getRehandleTierInfo(tier);return info?info.level:999;}
+
+function calculateLoadingPoints(rows){
+  const load=rows.filter(r=>{
+    const oog=upper(getValue(r,['Unit Is OOG?','Unit is OOG?']));
+    const hazardous=upper(getValue(r,['Unit is Hazardous?','Unit Is Hazardous?']));
+    return upper(getValue(r,['Move Kind']))==='LOAD'&&r._yard.isValidYard&&!['TRUE','T','1','YES','Y'].includes(oog)&&!['TRUE','T','1','YES','Y'].includes(hazardous);
+  });
+  const byHour=new Map(),byQueue=new Map();
+  for(const row of load){
+    const hour=moveHourKey(getMoveDate(row));
+    const qc=normalize(getValue(row,['Pow Name','QC','POW']));
+    if(!hour)continue;
+    const key=hour+'|'+qc;
+    if(!byHour.has(key))byHour.set(key,[]);
+    byHour.get(key).push(row);
+    const queue=normalize(getValue(row,['Queue','Work Queue']));
+    if(queue){
+      if(!byQueue.has(queue))byQueue.set(queue,{bays:new Set(),firstHour:hour,lastHour:hour});
+      const queueGroup=byQueue.get(queue);queueGroup.bays.add(row._yard.yardBay);
+      if(hour<queueGroup.firstHour)queueGroup.firstHour=hour;if(hour>queueGroup.lastHour)queueGroup.lastHour=hour;
+    }
+  }
+  const details=[];
+  let totalPoints=0,totalMoves=0;
+  for(const [key,grp] of byHour){
+    const [hour,qc]=key.split('|');
+    const bays=new Set;
+    for(const row of grp){
+      const bay=row._yard.yardBay;
+      if(bay&&bay!=='EC'&&bay!=='HP')bays.add(bay);
+    }
+    details.push({'Hour':hour,'System Hour':getDisplaySystemHourLabel(hour,rows),'QC / POW':qc||'N/A','Distinct Loading Points':bays.size,'Loading Points':Array.from(bays).sort().join(', '),'Move Count':grp.length});
+    totalPoints+=bays.size;
+    totalMoves+=grp.length;
+  }
+  details.sort((a,b)=>a.Hour.localeCompare(b.Hour)||String(a['QC / POW']).localeCompare(String(b['QC / POW'])));
+  const avgLoadingPoints=details.length?totalPoints/details.length:0;
+  const queueDetails=Array.from(byQueue.entries()).map(([Queue,group])=>({'Queue':Queue,'First Hour':group.firstHour,'Last Hour':group.lastHour,'System Hour Interval':`${getDisplaySystemHourLabel(group.firstHour,rows)} → ${getDisplaySystemHourLabel(group.lastHour,rows)}`,'Distinct Loading Points':group.bays.size,'Loading Points':Array.from(group.bays).sort().join(', ')})).sort((a,b)=>a.Queue.localeCompare(b.Queue));
+  const activePoints=queueDetails.length?queueDetails.reduce((sum,row)=>sum+row['Distinct Loading Points'],0)/queueDetails.length:0;
+  return{eligible:totalMoves,count:totalMoves,percent:avgLoadingPoints,activePoints,details,queueDetails};
+}
+
+function isSpecialStowValue(v){const value=upper(v);return value!==''&&!['FALSE','NO','N','0'].includes(value);}
+function getVerifiedPosition(row){const moveFrom=upper(getValue(row,['Move From'])),current=upper(getValue(row,['Current Position']));return moveFrom&&current&&moveFrom===current?'Actual':'Planned';}
+function getRehandleReason(row){
+  let reason='Normal';
+  if(['TRUE','T','1','YES','Y'].includes(upper(getValue(row,['Unit is Hazardous?','Unit Is Hazardous?']))))reason='IMO';
+  if(isSpecialStowValue(getValue(row,['Unit is Special Stow?','Unit Is Special Stow?'])))reason='Special Stow';
+  const category=upper(getValue(row,['Category']));if(category==='RESTOW'||category==='THROUGH')reason+=` / ${category==='RESTOW'?'Restow':'Through'}`;
+  return reason;
+}
+function calculateRehandles(rows){
+  const eligible=rows.filter(r=>upper(getValue(r,['Move Kind']))==='LOAD'&&r._yard.isValidYard);
+  const actionable=eligible.filter(r=>getRehandleTierInfo(r._yard.yardTier)!==null);
+  const groups=new Map();
+  for(const row of actionable){
+    const key=row._yard.yardBlockRow;
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(row);
+  }
+  let allRehandles=[];
+  for(const [key,group] of groups){
+    group.sort((a,b)=>{
+      const aInfo=getRehandleTierInfo(a._yard.yardTier),bInfo=getRehandleTierInfo(b._yard.yardTier);
+      return aInfo.family.localeCompare(bInfo.family)||aInfo.level-bInfo.level;
+    });
+    const alreadyCounted=new Set();
+    for(let i=0;i<group.length-1;i++){
+      const causingRow=group[i],causingInfo=getRehandleTierInfo(causingRow._yard.yardTier),causingTime=getMoveDate(causingRow);
+      if(!causingTime)continue;
+      for(let j=i+1;j<group.length;j++){
+        const rehandledRow=group[j],rehandledInfo=getRehandleTierInfo(rehandledRow._yard.yardTier),rehandledTime=getMoveDate(rehandledRow);
+        if(!rehandledTime||causingInfo.family!==rehandledInfo.family||rehandledInfo.level<=causingInfo.level)continue;
+        // A rehandle exists only when a lower tier is picked while a higher tier is still present.
+        if(causingTime.getTime()>=rehandledTime.getTime())continue;
+        const rehandledContainer=getContainer(rehandledRow);
+        const uniqueKey=key+'|'+(rehandledContainer||rehandledRow._yard.yardTier+'|'+rehandledTime.getTime());
+        if(alreadyCounted.has(uniqueKey))continue;
+        alreadyCounted.add(uniqueKey);
+        allRehandles.push({'Stack / Row':key,'Rehandled Container':rehandledContainer,'Causing Container':getContainer(causingRow),'Blocking Container':getContainer(causingRow),'Causing Tier':causingRow._yard.yardTier,'Causing Move Time':dateLabel(causingTime),'Verified Position':getVerifiedPosition(rehandledRow),'Reason':getRehandleReason(rehandledRow),'Tier':rehandledRow._yard.yardTier,'Move Time':dateLabel(rehandledTime),'timeKey':rehandledTime.getTime()});
+      }
+    }
+  }
+  const uniqueRehandles=new Map();
+  for(const rehandle of allRehandles){
+    const key=rehandle['Stack / Row']+'|'+(rehandle['Rehandled Container']||rehandle.Tier+'|'+rehandle.timeKey);
+    if(!uniqueRehandles.has(key))uniqueRehandles.set(key,rehandle);
+  }
+  const details=Array.from(uniqueRehandles.values()).map(r=>{delete r.timeKey;return r;});
+  const count=details.length;
+  const percent=eligible.length?count/eligible.length*100:0;
+  return{eligible:eligible.length,count,percent,details};
+}
+
+function calculateTwinPlanning(rows){
+  const weightLimitKg=15000;
+  const eligible=rows.filter(r=>{
+    const length=normalize(getValue(r,['Length','ISO']));
+    const oog=upper(getValue(r,['Unit Is OOG?','Unit is OOG?']));
+    return upper(getValue(r,['Move Kind']))==='LOAD'&&length.startsWith('20')&&r._yard.isValidYard&&getContainer(r)&&!['TRUE','T','1','YES','Y'].includes(oog);
+  });
+  const byBay=new Map();
+  eligible.forEach((row,index)=>{const bay=row._yard.yardBay;if(!byBay.has(bay))byBay.set(bay,[]);byBay.get(bay).push(index);});
+  let opportunityPairs=0;
+  byBay.forEach(indexes=>{opportunityPairs+=Math.floor(indexes.length/2);});
+  const candidates=[];
+  for(let i=0;i<eligible.length;i++)for(let j=i+1;j<eligible.length;j++){
+    if(eligible[i]._yard.yardBay!==eligible[j]._yard.yardBay)continue;
+    const q1=upper(getValue(eligible[i],['Queue'])),q2=upper(getValue(eligible[j],['Queue']));
+    if(!q1||q1!==q2)continue;
+    const w1=number(getValue(eligible[i],['Unit Weight (kg)'])),w2=number(getValue(eligible[j],['Unit Weight (kg)']));
+    if(w1>0&&w2>0&&Math.abs(w1-w2)>weightLimitKg)continue;
+    const seqDiff=Math.abs(number(getValue(eligible[i],['Sequence','Seq']))-number(getValue(eligible[j],['Sequence','Seq'])));
+    candidates.push({i,j,seqDiff});
+  }
+  candidates.sort((a,b)=>a.seqDiff-b.seqDiff);
+  const used=new Set(),plannedPairs=[];
+  for(const candidate of candidates){
+    if(used.has(candidate.i)||used.has(candidate.j))continue;
+    used.add(candidate.i);used.add(candidate.j);plannedPairs.push([candidate.i,candidate.j]);
+  }
+  const details=plannedPairs.map(([i,j])=>({'Status':'Planned Twin','Container 1':getContainer(eligible[i]),'Yard Bay 1':eligible[i]._yard.yardBay,'Move To 1':normalize(getValue(eligible[i],['Move To','Planned Position'])),'Queue 1':normalize(getValue(eligible[i],['Queue'])),'Seq 1':number(getValue(eligible[i],['Sequence','Seq'])),'Container 2':getContainer(eligible[j]),'Yard Bay 2':eligible[j]._yard.yardBay,'Move To 2':normalize(getValue(eligible[j],['Move To','Planned Position'])),'Queue 2':normalize(getValue(eligible[j],['Queue'])),'Seq 2':number(getValue(eligible[j],['Sequence','Seq'])),'Rule':'Exact Yard Bay, same Queue, weight difference ≤ 15,000 kg'}));
+  const missedNeeded=Math.max(0,opportunityPairs-plannedPairs.length);
+  const missed=[];
+  for(const [bay,indexes] of byBay){
+    const remaining=indexes.filter(index=>!used.has(index)).sort((a,b)=>number(getValue(eligible[a],['Sequence','Seq']))-number(getValue(eligible[b],['Sequence','Seq'])));
+    for(let i=0;i+1<remaining.length&&missed.length<missedNeeded;i+=2){
+      const a=remaining[i],b=remaining[i+1],q1=normalize(getValue(eligible[a],['Queue'])),q2=normalize(getValue(eligible[b],['Queue']));
+      missed.push({'Status':'Missed Twin','Container 1':getContainer(eligible[a]),'Yard Bay 1':bay,'Move To 1':normalize(getValue(eligible[a],['Move To','Planned Position'])),'Queue 1':q1,'Seq 1':number(getValue(eligible[a],['Sequence','Seq'])),'Container 2':getContainer(eligible[b]),'Yard Bay 2':bay,'Move To 2':normalize(getValue(eligible[b],['Move To','Planned Position'])),'Queue 2':q2,'Seq 2':number(getValue(eligible[b],['Sequence','Seq'])),'Rule':'Exact-bay opportunity not planned as a valid twin'});
+    }
+  }
+  details.push(...missed);
+  const planned=plannedPairs.length,percent=opportunityPairs?planned/opportunityPairs*100:0;
+  return{eligible:opportunityPairs,count:planned,opportunityPairs,plannedPairs:planned,percent,details};
+}
+
+function normalizeRowForComparison(row){
+  if(row===null)return null;
+  if(typeof row==='number')return String(row).padStart(2,'0');
+  if(/^\d+$/.test(String(row)))return String(row).padStart(2,'0');
+  return String(row).toUpperCase();
+}
+
+function extractAllRows(bayRows){
+  const rowIds=new Set;
+  for(const row of bayRows){
+    const yardRow=row._yard.yardRow;
+    if(/^\d+$/.test(yardRow))rowIds.add(parseInt(yardRow));
+    else if(/^[A-G]$/.test(yardRow))rowIds.add(yardRow);
+  }
+  if(rowIds.size===0)return null;
+  const firstRow=Array.from(rowIds)[0];
+  const rowType=/^[A-G]$/.test(String(firstRow))?'LETTER':'NUMBER';
+  let allRows=Array.from(rowIds).map(r=>normalizeRowForComparison(r));
+  if(rowType==='LETTER')allRows.sort((a,b)=>a.charCodeAt(0)-b.charCodeAt(0));
+  else allRows.sort((a,b)=>number(a)-number(b));
+  return{rowType,allRows,minRow:allRows[0],maxRow:allRows[allRows.length-1]};
+}
+
+function checkLeftOpening(rowId,allRows,completedRows,rowType){
+  const normalizedRowId=normalizeRowForComparison(rowId);
+  const rowIndex=allRows.findIndex(r=>normalizeRowForComparison(r)===normalizedRowId);
+  if(rowIndex<0)return false;
+  if(rowIndex<=0)return true;
+  for(let i=0;i<rowIndex;i++){
+    const normalizedRowToCheck=normalizeRowForComparison(allRows[i]);
+    if(!completedRows.has(normalizedRowToCheck))return false;
+  }
+  return true;
+}
+
+function checkRightOpening(rowId,allRows,completedRows,rowType){
+  const normalizedRowId=normalizeRowForComparison(rowId);
+  const rowIndex=allRows.findIndex(r=>normalizeRowForComparison(r)===normalizedRowId);
+  if(rowIndex<0)return false;
+  if(rowIndex>=allRows.length-1)return true;
+  for(let i=rowIndex+1;i<allRows.length;i++){
+    const normalizedRowToCheck=normalizeRowForComparison(allRows[i]);
+    if(!completedRows.has(normalizedRowToCheck))return false;
+  }
+  return true;
+}
+
+function compareTiers(tier1,tier2){
+  tier1=clean(tier1).toUpperCase();
+  tier2=clean(tier2).toUpperCase();
+  if(/^[A-G]$/.test(tier1)&&/^[A-G]$/.test(tier2)){
+    const code1=tier1.charCodeAt(0);const code2=tier2.charCodeAt(0);
+    if(code1<code2)return -1;if(code1>code2)return 1;return 0;
+  }
+  const num1=number(tier1);const num2=number(tier2);
+  if(num1<num2)return -1;if(num1>num2)return 1;return 0;
+}
+
+function calculateYardPickingSequence(rows){
+  const load=rows.filter(r=>upper(getValue(r,['Move Kind']))=='LOAD'&&r._yard.isValidYard);
+  const byBay=new Map();
+  for(const row of load){
+    const bay=row._yard.yardBay;
+    if(!byBay.has(bay))byBay.set(bay,[]);
+    byBay.get(bay).push(row);
+  }
+  const details=[];
+  for(const [bay,bayRows] of byBay){
+    const orderedRows=bayRows.filter(row=>getMoveDate(row)).sort((a,b)=>{
+      const timeDifference=getMoveDate(a)-getMoveDate(b);
+      if(timeDifference!==0)return timeDifference;
+      return number(getValue(a,['Sequence','Seq']))-number(getValue(b,['Sequence','Seq']));
+    });
+    const allRowsObj=extractAllRows(orderedRows);
+    if(!allRowsObj)continue;
+    const {rowType,allRows,minRow,maxRow}=allRowsObj;
+    const remainingByRow=new Map();
+    for(const row of orderedRows){
+      const rowId=normalizeRowForComparison(row._yard.yardRow);
+      if(!remainingByRow.has(rowId))remainingByRow.set(rowId,[]);
+      remainingByRow.get(rowId).push(row);
+    }
+    const evacuatedRows=new Set;
+    for(const row of orderedRows){
+      const rowId=row._yard.yardRow;
+      const normalizedRowId=normalizeRowForComparison(rowId);
+      const tier=row._yard.yardTier;
+      const stack=row._yard.yardBlockRow;
+      const remaining=remainingByRow.get(normalizedRowId)||[];
+      const hasLeftOpening=checkLeftOpening(rowId,allRows,evacuatedRows,rowType);
+      const hasRightOpening=checkRightOpening(rowId,allRows,evacuatedRows,rowType);
+      const sideCorrect=hasLeftOpening||hasRightOpening;
+      const tierInfo=getRehandleTierInfo(tier);
+      const remainingTierInfos=remaining.map(item=>getRehandleTierInfo(item._yard.yardTier)).filter(Boolean);
+      const sameFamilyTiers=tierInfo?remainingTierInfos.filter(info=>info.family===tierInfo.family):[];
+      const highestRemaining=sameFamilyTiers.length?Math.max(...sameFamilyTiers.map(info=>info.level)):null;
+      const tierCorrect=!tierInfo||highestRemaining===null||tierInfo.level===highestRemaining;
+      const reasons=[];
+      if(!sideCorrect){
+        const rowIndex=allRows.findIndex(value=>normalizeRowForComparison(value)===normalizedRowId);
+        const leftBlocking=allRows.slice(0,rowIndex).map(normalizeRowForComparison).filter(value=>!evacuatedRows.has(value));
+        const rightBlocking=allRows.slice(rowIndex+1).map(normalizeRowForComparison).filter(value=>!evacuatedRows.has(value));
+        reasons.push(`Row/Stack not exposed from either side. Non-evacuated rows [Right: ${rightBlocking.join(', ')} / Left: ${leftBlocking.join(', ')}]`);
+      }
+      if(!tierCorrect)reasons.push('Row/Stack incorrect tier order.');
+      const isCorrect=sideCorrect&&tierCorrect;
+      const sequence=number(getValue(row,['Sequence','Seq']));
+      details.push({'Yard Lane':bay,'Row':rowId,'Yard Stack':stack,'Container':getContainer(row),'Tier':tier,'Pick Order':sequence,'Move Time':dateLabel(getMoveDate(row)),'Sequence':sequence,'Status':isCorrect?'✅ Correct':'❌ Violation','Reason':isCorrect?'':reasons.join(' | ')});
+      const currentIndex=remaining.indexOf(row);
+      if(currentIndex>=0)remaining.splice(currentIndex,1);
+      if(remaining.length===0)evacuatedRows.add(normalizedRowId);
+    }
+  }
+  const yardPickingMap=new Map;
+  details.forEach((d,idx)=>{yardPickingMap.set(d.Container,idx);});
+  if(window.latestRehandles&&window.latestRehandles.details){
+    for(const rehandle of window.latestRehandles.details){
+      const causingContainer=rehandle['Causing Container']||rehandle['Blocking Container'];
+      if(causingContainer){
+        const idx=yardPickingMap.get(causingContainer);
+        if(idx!==undefined){
+          details[idx].Status='❌ Violation';
+          const tierReason='Row/Stack incorrect tier order.';
+          const rehandleReason='Row/Stack incorrect tier order. (Caused Rehandle)';
+          if(details[idx].Reason.includes(tierReason))details[idx].Reason=details[idx].Reason.replace(tierReason,rehandleReason);
+          else details[idx].Reason=details[idx].Reason?`${details[idx].Reason} | ${rehandleReason}`:rehandleReason;
+        }else{
+          const causingSource=load.find(item=>getContainer(item)===causingContainer);
+          const causingStack=causingSource&&causingSource._yard?causingSource._yard.yardBlockRow:rehandle['Stack / Row'];
+          const causingLane=causingSource&&causingSource._yard?causingSource._yard.yardBay:'N/A';
+          const causingRow=causingSource&&causingSource._yard?causingSource._yard.yardRow:'N/A';
+          details.push({'Yard Lane':causingLane,'Row':causingRow,'Yard Stack':causingStack,'Container':causingContainer,'Tier':rehandle['Causing Tier']||'N/A','Pick Order':'N/A','Move Time':rehandle['Causing Move Time']||'N/A','Sequence':'N/A','Status':'❌ Violation','Reason':'Row/Stack incorrect tier order. (Caused Rehandle)'});
+          yardPickingMap.set(causingContainer,details.length-1);
+        }
+      }
+    }
+  }
+  const violations=details.filter(d=>d.Status.includes('Violation')).length;
+  const eligible=details.length;
+  const correctPicks=eligible-violations;
+  const percent=eligible>0?(correctPicks/eligible)*100:100;
+  return{eligible,violations,correctPicks,percent,details};
+}
+
+function calculateOperationalOverlap(rows){
+  const validMoves=rows.filter(r=>r._yard.isValidYard&&r._yard.yardBay);
+  const bayPOWMap=new Map();
+  for(const row of validMoves){
+    const bay=row._yard.yardBay;
+    const pow=normalize(getValue(row,['Pow Name','P.O.W.','P.O.W','POW Name','POW','QC','Crane','Crane ID']));
+    if(!bayPOWMap.has(bay))bayPOWMap.set(bay,new Set());
+    if(pow)bayPOWMap.get(bay).add(pow);
+  }
+  const details=[];
+  let overlapCount=0;
+  for(const [bay,pows] of bayPOWMap){
+    const powList=Array.from(pows);
+    const isOverlap=pows.size>1;
+    if(isOverlap)overlapCount++;
+    details.push({'Yard Bay':bay,'POW Count':pows.size,'POWs':powList.join(', '),'Status':isOverlap?'❌ Overlapped':'✅ Single'});
+  }
+  details.sort((a,b)=>b['POW Count']-a['POW Count']||String(a['Yard Bay']).localeCompare(String(b['Yard Bay'])));
+  const totalBays=bayPOWMap.size;
+  const percent=totalBays>0?(overlapCount/totalBays)*100:0;
+  return{totalBays,overlapCount,percent,details};
+}
+
+// OPERATIONAL SUMMARY — aligned with the Straddle and RTG tools.
+function isLoadMove(row){return upper(getValue(row,['Move Kind']))==='LOAD';}
+function isDischargeMove(row){const kind=upper(getValue(row,['Move Kind']));return kind==='DISCHARGE'||kind==='DISCH'||kind==='DSCH';}
+function calculateOperationalSummary(rows){
+  const validMoveRows=rows.filter(row=>isLoadMove(row)||isDischargeMove(row));
+  const totalMoves=validMoveRows.length;
+  const totalLoad=validMoveRows.filter(isLoadMove).length;
+  const totalDischarge=validMoveRows.filter(isDischargeMove).length;
+  const totalRestows=validMoveRows.filter(row=>{const category=upper(getValue(row,['Category']));return category==='RESTOW'||category==='THROUGH';}).length;
+  const moveDates=validMoveRows.map(getMoveDate).filter(Boolean).sort((a,b)=>a-b);
+  const operationsHours=moveDates.length>1?(moveDates[moveDates.length-1]-moveDates[0])/3600000:0;
+  const plannedPortHours=operationsHours+PLANNED_PORT_ALLOWANCE_MINUTES/60;
+  const craneBuckets=new Map();
+  validMoveRows.forEach(row=>{
+    const crane=normalize(getValue(row,['Pow Name','P.O.W.','P.O.W','POW Name','POW','QC','Crane','Crane ID']));
+    const moveDate=getMoveDate(row);
+    if(!crane||!moveDate)return;
+    if(!craneBuckets.has(crane))craneBuckets.set(crane,[]);
+    craneBuckets.get(crane).push(moveDate);
+  });
+  let sumCraneHours=0;
+  craneBuckets.forEach(dates=>{dates.sort((a,b)=>a-b);if(dates.length>1)sumCraneHours+=(dates[dates.length-1]-dates[0])/3600000;});
+  const ciPlanned=plannedPortHours>0?sumCraneHours/plannedPortHours:0;
+  const cmph=sumCraneHours>0?totalMoves/sumCraneHours:0;
+  return{totalMoves,totalLoad,totalDischarge,totalRestows,operationsHours,plannedPortHours,sumCraneHours,ciPlanned,cmph};
+}
+
+// RENDERING & EXPORT
+function renderLoadingDetails(loading){
+  fillTable('loadingPointsTableBody',loading.details,['Hour','System Hour','QC / POW','Distinct Loading Points','Loading Points']);
+  fillTable('loadingQueueTableBody',loading.queueDetails||[],['System Hour Interval','Queue','Distinct Loading Points','Loading Points']);
+}
+function renderRehandleDetailRows(rows){
+  fillTable('rehandlesTable',rows,['Stack / Row','Rehandled Container','Verified Position','Reason','Tier']);
+  const count=$('rehandlesFilterCount'),total=(window.latestRehandleRows||[]).length;if(count)count.textContent=`Showing ${rows.length.toLocaleString()} of ${total.toLocaleString()}`;
+}
+function filterRehandlesDetails(){
+  const filter=$('rehandlesVerifiedFilter'),selected=filter?filter.value:'';
+  renderRehandleDetailRows((window.latestRehandleRows||[]).filter(row=>!selected||row['Verified Position']===selected));
+}
+function renderTwinDetails(twin){
+  const tbody=$('twinPlanningTable');tbody.innerHTML='';
+  const columns=['Status','Container 1','Yard Bay 1','Move To 1','Queue 1','Seq 1','Container 2','Yard Bay 2','Move To 2','Queue 2','Seq 2'];
+  const addSection=(title,items,cls)=>{
+    const separator=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=11;cell.className='twins-separator';cell.textContent=title;separator.appendChild(cell);tbody.appendChild(separator);
+    if(!items.length){const row=document.createElement('tr'),empty=document.createElement('td');empty.colSpan=11;empty.textContent=`No ${title.toLowerCase()}`;row.appendChild(empty);tbody.appendChild(row);return;}
+    items.forEach(item=>{const row=document.createElement('tr');columns.forEach((column,index)=>{const td=document.createElement('td');td.textContent=String(item[column]??'');if(index===0)td.className=cls;row.appendChild(td);});tbody.appendChild(row);});
+  };
+  addSection('MISSED TWINS',(twin.details||[]).filter(row=>row.Status==='Missed Twin'),'bad');
+  addSection('PLANNED TWINS',(twin.details||[]).filter(row=>row.Status==='Planned Twin'),'good');
+}
+function renderYardPickingDetails(yardPicking){
+  const tbody=$('yardPickingAdherenceTableBody');tbody.innerHTML='';
+  const columns=['Yard Lane','Row','Yard Stack','Tier','Container','Sequence','Status','Reason'];
+  const addSection=(title,items,cls)=>{
+    const separator=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=columns.length;cell.className='twins-separator';cell.textContent=title;separator.appendChild(cell);tbody.appendChild(separator);
+    if(!items.length){const row=document.createElement('tr'),empty=document.createElement('td');empty.colSpan=columns.length;empty.textContent=`No ${title.toLowerCase()}`;row.appendChild(empty);tbody.appendChild(row);return;}
+    items.forEach(item=>{const row=document.createElement('tr');columns.forEach((column,index)=>{const td=document.createElement('td');td.textContent=String(item[column]??'');if(column==='Status')td.className=cls;row.appendChild(td);});tbody.appendChild(row);});
+  };
+  const details=yardPicking.details||[];
+  addSection('INCORRECT PICKING SEQUENCE',details.filter(row=>normalize(row.Status).includes('Violation')),'bad');
+  addSection('CORRECT PICKING SEQUENCE',details.filter(row=>!normalize(row.Status).includes('Violation')),'good');
+}
+function renderResults(results){
+  const {ops}=results;
+  
+  $('totalMoves').textContent=ops.totalMoves;
+  $('totalLoad').textContent=ops.totalLoad;
+  $('totalDischarge').textContent=ops.totalDischarge;
+  $('totalRestows').textContent=ops.totalRestows;
+  $('cmph').textContent=ops.cmph.toFixed(2);
+  $('plannedHours').textContent=ops.plannedPortHours.toFixed(1);
+  $('ciPlanned').textContent=ops.ciPlanned.toFixed(2);
+
+  const terminal=results.terminal||$('terminal').value;
+  if(terminal==='LRMLW'){
+    $('yardKpiSection').classList.add('hidden');
+    closeAllDetails();
+    $('summaryCard').classList.remove('hidden');
+    return;
+  }
+  $('yardKpiSection').classList.remove('hidden');
+  const {loading,rehandles,twin,yardPicking,operationalOverlap}=results;
+  
+  $('loadingPoints').textContent=loading.percent.toFixed(2);
+  $('loadingPointsObs').textContent=`Active Points: ${loading.activePoints.toFixed(2)}`;
+  $('rehandles').textContent=rehandles.percent.toFixed(2)+'%';
+  $('rehandlesObs').textContent=`Eligible: ${rehandles.eligible} | Rehandles: ${rehandles.count}`;
+  $('twinPlanning').textContent=twin.percent.toFixed(2)+'%';
+  $('twinPlanningObs').textContent=`Opportunities: ${twin.opportunityPairs} Pairs | Planned: ${twin.plannedPairs} Pairs`;
+  $('yardPickingAdherence').textContent=yardPicking.percent.toFixed(2)+'%';
+  $('yardPickingAdherenceObs').textContent=`Eligible: ${yardPicking.eligible} | Correct: ${yardPicking.correctPicks} | Violations: ${yardPicking.violations}`;
+  $('operationalOverlap').textContent=operationalOverlap.percent.toFixed(2)+'%';
+  $('operationalOverlapObs').textContent=`Total Bays: ${operationalOverlap.totalBays} | Overlapped: ${operationalOverlap.overlapCount}`;
+  applyJOAQJTargetColor('loadingPoints',loading.percent);
+  applyJOAQJTargetColor('rehandles',rehandles.percent);
+  applyJOAQJTargetColor('twinPlanning',twin.percent);
+  applyJOAQJTargetColor('yardPickingAdherence',yardPicking.percent);
+  applyJOAQJTargetColor('operationalOverlap',operationalOverlap.percent);
+  
+  renderLoadingDetails(loading);
+  window.latestRehandleRows=rehandles.details||[];if($('rehandlesVerifiedFilter'))$('rehandlesVerifiedFilter').value='';renderRehandleDetailRows(window.latestRehandleRows);
+  renderTwinDetails(twin);
+  renderYardPickingDetails(yardPicking);
+  fillTable('operationalOverlapTable',operationalOverlap.details,['Yard Bay','POW Count','POWs','Status']);
+  
+  $('summaryCard').classList.remove('hidden');
+}
+
+async function exportKPIReport(){
+  const data=window.latestKPIExport;
+  if(!data){alert('Please calculate KPIs first.');return;}
+  const oldExport=document.getElementById('exportContainer');
+  if(oldExport)oldExport.remove();
+  const page=document.querySelector('.page');
+  const header=document.querySelector('.header').cloneNode(true);
+  const rows=data.rows||[];
+  header.querySelector('h1').textContent='SPC-RS/EH Planning KPI Report';
+  header.querySelector('p').textContent='Terminal operators, Yard Flow and planning KPI Analytics For RS/EH Terminals';
+  const summary=$('summaryCard').cloneNode(true);
+  summary.classList.remove('hidden');summary.classList.add('export-clean');
+  summary.querySelectorAll('.details-btn').forEach(btn=>btn.style.display='none');
+  const container=document.createElement('div');
+  container.id='exportContainer';
+  container.style.cssText='position:absolute;left:-9999px;top:-9999px;background:white;width:1200px;padding:40px;';
+  container.appendChild(header);
+  container.appendChild(summary);
+  const ftr=document.querySelector('.copyright-footer').cloneNode(true);
+  ftr.style.cssText='margin-top:40px;';
+  container.appendChild(ftr);
+  document.body.appendChild(container);
+  try{
+    const canvas=await html2canvas(container,{backgroundColor:'#ffffff',scale:2,useCORS:true,logging:false,windowWidth:container.scrollWidth,windowHeight:container.scrollHeight});
+    const imgData=canvas.toDataURL('image/png');
+    const {jsPDF}=window.jspdf;
+    const landscape=canvas.width>canvas.height;
+    const pdf=new jsPDF({orientation:landscape?'landscape':'portrait',unit:'pt',format:'a4'});
+    const pageW=pdf.internal.pageSize.getWidth();
+    const pageH=pdf.internal.pageSize.getHeight();
+    const margin=20;
+    const maxW=pageW-margin*2;
+    const maxH=pageH-margin*2;
+    const ratio=Math.min(maxW/canvas.width,maxH/canvas.height);
+    const imgW=canvas.width*ratio;
+    let yOffset=0;
+    let firstPage=true;
+    while(yOffset<canvas.height){
+      if(!firstPage)pdf.addPage();
+      firstPage=false;
+      const sliceH=Math.min(maxH/ratio,canvas.height-yOffset);
+      const sliceCanvas=document.createElement('canvas');
+      sliceCanvas.width=canvas.width;sliceCanvas.height=sliceH;
+      const ctx=sliceCanvas.getContext('2d');
+      ctx.drawImage(canvas,0,-yOffset);
+      const sliceData=sliceCanvas.toDataURL('image/png');
+      pdf.addImage(sliceData,'PNG',margin,margin,imgW,sliceH*ratio);
+      yOffset+=sliceH;
+    }
+    pdf.save(`${$('terminal').value||'RS-EH'}-RS-EH-KPI-Report.pdf`);
+  }catch(err){
+    alert('PDF export failed: '+err.message);
+  }finally{
+    container.remove();
+  }
+}
+
+async function exportDetailPDF(cardId,label){
+  const oldExport=document.getElementById('exportContainer');
+  if(oldExport)oldExport.remove();
+  const data=window.latestKPIExport;if(!data){alert('Please calculate KPIs first.');return;}
+  const rows=data.rows||[],carrier=normalize(getValue(rows[0]||{},['Carrier','Vessel ID']))||'Vessel',carrierName=normalize(getValue(rows[0]||{},['Carrier Name','Vessel Name']))||'Unknown';
+  const card=$(cardId);if(!card){alert('Detail card not found.');return;}
+  const clone=card.cloneNode(true);clone.classList.remove('hidden');clone.querySelectorAll('.export-detail-btn').forEach(button=>button.style.display='none');
+  const container=document.createElement('div');
+  container.id='exportContainer';
+  container.style.cssText='position:fixed;left:-12000px;top:0;background:#fff;padding:28px 24px;box-sizing:border-box;width:1200px;font-family:Segoe UI,Arial,sans-serif;color:#0f172a;';
+  const header=document.createElement('div');header.style.cssText='background:linear-gradient(135deg,#002f4b,#006b8f);color:white;padding:18px 22px;border-radius:14px;margin-bottom:18px;';header.innerHTML=`<div style="font-size:18px;font-weight:800;margin-bottom:4px">SPC-RS/EH Planning KPI Calculator</div><div style="font-size:13px;opacity:.8">${escapeHtml(carrier)} | ${escapeHtml(carrierName)} | ${escapeHtml(label)} Details</div>`;
+  const ftr=document.createElement('div');ftr.style.cssText='margin-top:18px;padding-top:12px;border-top:1px solid #dbe4ea;font-size:11px;font-weight:700;color:#64748b;text-align:center;';ftr.textContent='SPC Tangier - HBO Confidential & Proprietary © 2026';
+  container.appendChild(header);container.appendChild(clone);container.appendChild(ftr);
+  document.body.appendChild(container);
+  try{
+    const canvas=await html2canvas(container,{backgroundColor:'#ffffff',scale:2,useCORS:true,logging:false,windowWidth:container.scrollWidth,windowHeight:container.scrollHeight});
+    const {jsPDF}=window.jspdf;
+    const pdf=new jsPDF({orientation:canvas.width>canvas.height?'landscape':'portrait',unit:'pt',format:'a4'}),pageW=pdf.internal.pageSize.getWidth(),pageH=pdf.internal.pageSize.getHeight(),margin=20,ratio=(pageW-margin*2)/canvas.width,imgW=canvas.width*ratio;
+    let yOffset=0,firstPage=true;while(yOffset<canvas.height){if(!firstPage)pdf.addPage();firstPage=false;const sliceH=Math.min((pageH-margin*2)/ratio,canvas.height-yOffset),slice=document.createElement('canvas');slice.width=canvas.width;slice.height=sliceH;slice.getContext('2d').drawImage(canvas,0,-yOffset);pdf.addImage(slice.toDataURL('image/png'),'PNG',margin,margin,imgW,sliceH*ratio);yOffset+=sliceH;}
+    pdf.save((`JOAQJ - ${carrier} - ${carrierName} - ${label} Details.pdf`).replace(/[\/:*?"<>|]/g,'-'));
+  }catch(err){
+    alert('Detail PDF export failed: '+err.message);
+  }finally{
+    container.remove();
+  }
+}
+
+function exportDetailExcel(tableId,label){
+  const data=window.latestKPIExport;if(!data){alert('Please calculate KPIs first.');return;}
+  const table=$(tableId);
+  if(!table){alert('Table not found.');return;}
+  const rows=data.rows||[],carrier=normalize(getValue(rows[0]||{},['Carrier','Vessel ID']))||'Vessel',carrierName=normalize(getValue(rows[0]||{},['Carrier Name','Vessel Name']))||'Unknown';
+  const ws=XLSX.utils.table_to_sheet(table,{raw:true});
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,label.substring(0,31));
+  XLSX.writeFile(wb,(`${carrier} - ${carrierName} - ${label} Details.xlsx`).replace(/[\/:*?"<>|]/g,'-'));
+}
+function exportMissedTwinsExcel(){
+  const data=window.latestKPIExport;if(!data){alert('Please calculate KPIs first.');return;}
+  const twin=data.data&&data.data.twin,missed=((twin&&twin.details)||[]).filter(row=>row.Status==='Missed Twin');
+  const headers=['Status','Container 1','Yard Bay 1','Move To 1','Queue 1','Seq 1','Container 2','Yard Bay 2','Move To 2','Queue 2','Seq 2'];
+  const body=missed.map(row=>headers.map(header=>row[header]??'')),ws=XLSX.utils.aoa_to_sheet([headers,...body]);
+  Object.keys(ws).filter(ref=>ref[0]!=='!').forEach(ref=>{if(ws[ref]&&ws[ref].v!==undefined){ws[ref].t='s';ws[ref].v=String(ws[ref].v);}});
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Missed Twins');
+  const rows=data.rows||[],carrier=normalize(getValue(rows[0]||{},['Carrier','Vessel ID']))||'Vessel',carrierName=normalize(getValue(rows[0]||{},['Carrier Name','Vessel Name']))||'Unknown';
+  XLSX.writeFile(wb,(`${carrier} - ${carrierName} - Missed Twins.xlsx`).replace(/[\/:*?"<>|]/g,'-'));
+}
+
+</script>
+
+</body>
+</html>
